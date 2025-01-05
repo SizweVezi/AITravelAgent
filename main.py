@@ -1,13 +1,16 @@
 import os
 from datetime import date, timedelta
 import time
-from http.client import responses
+from json.decoder import JSONObject
+from pyexpat.errors import messages
 
+from fontTools.misc.cython import returns
 from openai import OpenAI, completions, models, api_key
 from dotenv import load_dotenv, find_dotenv
 import json
 from amadeus import Client, ResponseError
 import tools
+import requests
 
 #initiating environment variables.
 _= load_dotenv(find_dotenv())
@@ -53,7 +56,6 @@ def hotel_offers_search(hotelIds, checkInDate = date.today(), checkOutDate = dat
         return str(error)
 
 #Get hotel offers wrapper
-
 def get_hotel_offers(location, check_in_date=date.today(), check_out_date=date.today() + timedelta(days=1)):
     try:
         city_code = city_code_search(location)
@@ -78,7 +80,8 @@ assistant_tools=tools.tools
 assistant = client.beta.assistants.create(
     instructions="You are a travel agent. Use the provided functions to answer questions. Please do not share the booking link",
     model="gpt-3.5-turbo",
-    tools=assistant_tools
+    tools=assistant_tools,
+    response_format="auto"
 )
 
 #Creating a thread that will represent the conversation
@@ -86,12 +89,16 @@ thread = client.beta.threads.create()
 message = client.beta.threads.messages.create(
     thread_id=thread.id,
     role="user",
-    content=input('>' )
+    content="I am looking to book a holiday in London"
 )
+# print(f"{message.content}")
 run = client.beta.threads.runs.create(
     thread_id=thread.id,
     assistant_id=assistant.id
 )
+
+
+
 #
 # run_status = client.beta.threads.runs.retrieve(
 #   thread_id=thread.id,
@@ -106,6 +113,7 @@ while run.status != 'completed':
         thread_id=thread.id,
         run_id=run.id
     )
+
     if run.status == "requires_action":
         required_action = run.required_action
 
@@ -151,6 +159,24 @@ while run.status != 'completed':
                 run_id=run.id,
                 tool_outputs=tool_outputs
             )
+    reply = client.beta.threads.messages.list(
+        thread_id=thread.id
+    )
+    messages = reply.data
+
+    assistant_reply = ""
+    for message in messages:
+        if message.role == "assistant":
+            for content in message.content:
+                if content.type =="text":
+                    assistant_reply = content.text.value
+                    break
+            if assistant_reply:
+                break
+    print("Assistant's Reply:", assistant_reply)
+
+
+
 
 
 
